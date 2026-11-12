@@ -267,14 +267,10 @@ const RANKING_URL = '';
     $('newBest').classList.toggle('hidden', !isBest);
     lastScore = score;
     savedThisRun = false;
-    if (RANKING_URL && score > 0) {
-      $('saveBox').classList.remove('hidden');
-      $('saveBtn').disabled = false;
-      $('saveMsg').textContent = '';
-      $('nameInput').value = myName;
-    } else {
-      $('saveBox').classList.add('hidden');
-    }
+    $('saveBox').classList.remove('hidden');
+    $('saveBtn').disabled = !RANKING_URL;
+    $('saveMsg').textContent = RANKING_URL ? '' : 'Ranking ainda não configurado (falta o link do Apps Script).';
+    $('nameInput').value = myName;
     loadRanking();
   }
 

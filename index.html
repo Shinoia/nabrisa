@@ -103,6 +103,7 @@ const RANKING_URL = 'https://script.google.com/macros/s/AKfycbyFB4SryFu1T3StSoZh
   const THICK = 0.6;           // espessura da pista
   const GRAVITY = 40;
   const LAT_SPEED = 11;        // velocidade lateral
+  const JUMP_V = 12.5;         // força do pulo
   const TH = Math.atan(SLOPE) + 0.16;
   const COS = Math.cos(TH), SIN = Math.sin(TH);
   const Y = z => -z * SLOPE;   // altura da pista na posição z
@@ -275,12 +276,18 @@ const RANKING_URL = 'https://script.google.com/macros/s/AKfycbyFB4SryFu1T3StSoZh
   }
 
   // ---------- Controles ----------
-  const keys = { left: false, right: false };
+  const keys = { left: false, right: false, brake: false };
   const pointers = new Map();
+  let jumpQueued = 0, brakeTouch = false;
   window.addEventListener('keydown', e => {
     if (e.target && e.target.tagName === 'INPUT') return;
     if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = true;
     if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = true;
+    if (e.code === 'ArrowDown' || e.code === 'KeyS') { keys.brake = true; e.preventDefault(); }
+    if ((e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'Space') && state === 'play') {
+      if (!e.repeat) jumpQueued = 0.15;
+      e.preventDefault();
+    }
     if ((e.code === 'Space' || e.code === 'Enter') && state !== 'play') {
       if (state === 'title' || deadTimer > 0.6) start();
       e.preventDefault();
@@ -289,7 +296,13 @@ const RANKING_URL = 'https://script.google.com/macros/s/AKfycbyFB4SryFu1T3StSoZh
   window.addEventListener('keyup', e => {
     if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = false;
     if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = false;
+    if (e.code === 'ArrowDown' || e.code === 'KeyS') keys.brake = false;
   });
+  // botões de toque (celular)
+  $('jumpBtn').addEventListener('pointerdown', e => { e.preventDefault(); if (state === 'play') jumpQueued = 0.15; });
+  $('brakeBtn').addEventListener('pointerdown', e => { e.preventDefault(); brakeTouch = true; });
+  for (const ev of ['pointerup', 'pointercancel', 'pointerleave'])
+    $('brakeBtn').addEventListener(ev, () => { brakeTouch = false; });
   cvs.addEventListener('pointerdown', e => { pointers.set(e.pointerId, e.clientX); e.preventDefault(); });
   cvs.addEventListener('pointermove', e => { if (pointers.has(e.pointerId)) pointers.set(e.pointerId, e.clientX); });
   const up = e => pointers.delete(e.pointerId);
@@ -309,7 +322,18 @@ const RANKING_URL = 'https://script.google.com/macros/s/AKfycbyFB4SryFu1T3StSoZh
   function update(dt) {
     clock += dt;
     if (state === 'play') {
-      speed = Math.min(46, 16 + ball.z * 0.012);
+      const baseSpeed = Math.min(46, 16 + ball.z * 0.012);
+      const braking = keys.brake || brakeTouch;
+      const goal = braking ? Math.max(10, baseSpeed * 0.5) : baseSpeed;
+      speed += (goal - speed) * Math.min(1, dt * (braking ? 3 : 1.5));
+      // pulo
+      jumpQueued = Math.max(0, jumpQueued - dt);
+      if (jumpQueued > 0 && !ball.air && tileAt(ball.x, ball.z)) {
+        ball.air = true;
+        ball.vy = -speed * SLOPE + JUMP_V;
+        ball.y = Y(ball.z) + R + 0.01;
+        jumpQueued = 0;
+      }
       const dir = inputDir();
       ball.vx += (dir * LAT_SPEED - ball.vx) * Math.min(1, dt * 12);
       ball.x += ball.vx * dt;
@@ -336,7 +360,8 @@ const RANKING_URL = 'https://script.google.com/macros/s/AKfycbyFB4SryFu1T3StSoZh
         for (const s of [s0, s1, s2]) {
           if (!s) continue;
           for (const o of s.obs) {
-            if (Math.abs(ball.x - obsX(s, o)) < 0.75 + R * 0.8 && Math.abs(ball.z - o.z) < 0.6 + R * 0.8) die('crash');
+            const overTop = ball.y - R > Y(o.z) + 1.1;
+            if (!overTop && Math.abs(ball.x - obsX(s, o)) < 0.75 + R * 0.8 && Math.abs(ball.z - o.z) < 0.6 + R * 0.8) die('crash');
           }
         }
       }

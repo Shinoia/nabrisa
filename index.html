@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#0a0618">
+<title>Naladera</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0618; touch-action: none;
+    font-family: "Trebuchet MS", "Segoe UI", system-ui, sans-serif; color: #fff; user-select: none; -webkit-user-select: none; }
+  canvas { display: block; touch-action: none; }
+  #hud { position: fixed; top: 18px; left: 0; right: 0; text-align: center; pointer-events: none; }
+  #score { font-size: 46px; font-weight: 800; letter-spacing: 2px; text-shadow: 0 0 18px rgba(120,255,240,.8); }
+  #best { font-size: 14px; opacity: .75; letter-spacing: 3px; margin-top: 2px; }
+  .overlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: radial-gradient(ellipse at center, rgba(10,6,24,.35), rgba(10,6,24,.85)); text-align: center; padding: 24px; }
+  .hidden { display: none !important; }
+  .logo { font-size: clamp(56px, 16vw, 120px); font-weight: 900; letter-spacing: 6px; line-height: 1;
+    background: linear-gradient(90deg, #5ff6ff, #b37bff 50%, #ff6fb5); -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 0 22px rgba(160,120,255,.6)); }
+  .sub { margin-top: 10px; font-size: 15px; letter-spacing: 6px; opacity: .8; text-transform: uppercase; }
+  .help { margin-top: 28px; font-size: 15px; line-height: 1.7; opacity: .85; max-width: 420px; }
+  .btn { margin-top: 30px; padding: 16px 46px; font-size: 20px; font-weight: 800; letter-spacing: 4px; color: #0a0618;
+    background: linear-gradient(90deg, #5ff6ff, #b37bff); border: none; border-radius: 999px; cursor: pointer;
+    box-shadow: 0 0 28px rgba(120,220,255,.6); font-family: inherit; }
+  .btn:active { transform: scale(.96); }
+  .big { font-size: 40px; font-weight: 900; letter-spacing: 3px; color: #ff6fb5; text-shadow: 0 0 20px rgba(255,80,160,.7); }
+  .final { margin-top: 14px; font-size: 22px; }
+  .final b { font-size: 34px; color: #5ff6ff; }
+  .newbest { margin-top: 8px; color: #ffe066; letter-spacing: 3px; font-weight: 700; }
+  .overlay { overflow-y: auto; }
+  .save { margin-top: 18px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  .save input { width: 200px; padding: 12px 16px; font-size: 17px; border-radius: 999px; border: 2px solid #5ff6ff;
+    background: rgba(0,0,0,.45); color: #fff; outline: none; font-family: inherit; text-align: center;
+    user-select: text; -webkit-user-select: text; }
+  .save button { padding: 12px 22px; font-size: 16px; font-weight: 800; border: none; border-radius: 999px; cursor: pointer;
+    background: #ff6fb5; color: #0a0618; font-family: inherit; letter-spacing: 1px; }
+  .save button:disabled { opacity: .5; cursor: default; }
+  .saveMsg { margin-top: 8px; font-size: 14px; min-height: 18px; opacity: .85; }
+  .rank { margin-top: 18px; width: 100%; max-width: 320px; background: rgba(10,6,24,.82); backdrop-filter: blur(6px); border: 1px solid rgba(95,246,255,.35);
+    border-radius: 16px; padding: 12px 16px; }
+  .rank h3 { font-size: 14px; letter-spacing: 4px; color: #5ff6ff; margin-bottom: 8px; }
+  .rank ol { list-style: none; text-align: left; font-size: 15px; }
+  .rank li { display: flex; justify-content: space-between; padding: 4px 2px; border-bottom: 1px solid rgba(255,255,255,.07); }
+  .rank li span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 10px; }
+  .rank li.me { color: #ffe066; font-weight: 700; }
+  .rank .empty { opacity: .6; font-size: 14px; text-align: center; display: block; border: none; }
+  #title .btn { margin-top: 22px; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud" class="hidden">
+  <div id="score">0</div>
+  <div id="best">RECORDE 0</div>
+</div>
+
+<div id="title" class="overlay">
+  <div class="logo">NALADERA</div>
+  <div class="sub">desça a ladeira</div>
+  <div class="help">
+    Desvie dos blocos e não caia da pista.<br>
+    <b>Computador:</b> setas ← → ou A / D<br>
+    <b>Celular:</b> toque e segure nos lados da tela
+  </div>
+  <button class="btn" id="playBtn">JOGAR</button>
+  <div class="rank hidden" id="rankTitle"><h3>TOP 10</h3><ol id="rankListTitle"></ol></div>
+</div>
+
+<div id="over" class="overlay hidden">
+  <div class="big" id="overMsg">VOCÊ CAIU!</div>
+  <div class="final">Distância: <b id="finalScore">0</b> m</div>
+  <div class="final" style="font-size:16px;opacity:.8">Recorde: <span id="finalBest">0</span> m</div>
+  <div class="newbest hidden" id="newBest">★ NOVO RECORDE ★</div>
+  <div id="saveBox" class="hidden">
+    <form class="save" id="saveForm">
+      <input id="nameInput" maxlength="15" placeholder="Seu nome" autocomplete="nickname">
+      <button type="submit" id="saveBtn">SALVAR</button>
+    </form>
+    <div class="saveMsg" id="saveMsg"></div>
+  </div>
+  <button class="btn" id="againBtn">JOGAR DE NOVO</button>
+  <div class="rank hidden" id="rankOver"><h3>TOP 10</h3><ol id="rankListOver"></ol></div>
+</div>
+
+<script>
+// ====== RANKING ======
+// Cole aqui o link do Apps Script (termina em /exec). Deixe vazio para desligar o ranking.
+const RANKING_URL = '';
+// =====================
+(() => {
+  // ---------- Configuração ----------
+  const SLOPE = 0.25;          // inclinação da pista
+  const SEG_LEN = 10;          // comprimento de cada bloco de pista
+  const LANES = 3;
+  const LANE_W = 2.2;
+  const TRACK_W = LANES * LANE_W;
+  const R = 0.45;              // raio da bola
+  const NEAR = 0.3;
+  const VIEW = 240;            // distância de visão
+  const THICK = 0.6;           // espessura da pista
+  const GRAVITY = 40;
+  const LAT_SPEED = 11;        // velocidade lateral
+  const TH = Math.atan(SLOPE) + 0.16;
+  const COS = Math.cos(TH), SIN = Math.sin(TH);
+  const Y = z => -z * SLOPE;   // altura da pista na posição z
+
+  // ---------- Canvas ----------
+  const cvs = document.getElementById('c');
+  const ctx = cvs.getContext('2d');
+  let W = 0, H = 0, F = 1;
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    cvs.width = Math.floor(W * dpr); cvs.height = Math.floor(H * dpr);
+    cvs.style.width = W + 'px'; cvs.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    F = Math.min(H * 0.95, W * 1.15);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------- Elementos da tela ----------
+  const $ = id => document.getElementById(id);
+  const hud = $('hud'), scoreEl = $('score'), bestEl = $('best');
+  const titleEl = $('title'), overEl = $('over');
+
+  let best = 0;
+  try { best = parseInt(localStorage.getItem('naladera_best') || '0', 10) || 0; } catch (e) {}
+  function saveBest() { try { localStorage.setItem('naladera_best', String(best)); } catch (e) {} }
+
+  // ---------- Ranking online ----------
+  let lastScore = 0, savedThisRun = false, myName = '';
+  try { myName = localStorage.getItem('naladera_name') || ''; } catch (e) {}
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  function showRanking(list) {
+    for (const [boxId, listId] of [['rankTitle', 'rankListTitle'], ['rankOver', 'rankListOver']]) {
+      $(boxId).classList.remove('hidden');
+      $(listId).innerHTML = list.length
+        ? list.map((r, i) => `<li class="${myName && String(r.name).toLowerCase() === myName.toLowerCase() ? 'me' : ''}">` +
+            `<span>${i + 1}. ${esc(r.name)}</span><span>${Number(r.score) || 0} m</span></li>`).join('')
+        : '<li class="empty">Ninguém no ranking ainda. Seja o primeiro!</li>';
+    }
+  }
+  async function callRanking(params) {
+    const url = RANKING_URL + '?' + new URLSearchParams(params).toString();
+    const res = await fetch(url);
+    const data = await res.json();
+    showRanking(data.top || []);
+    return data;
+  }
+  function loadRanking() {
+    if (!RANKING_URL) return;
+    callRanking({ action: 'top' }).catch(() => {});
+  }
+  $('saveForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const name = $('nameInput').value.trim().slice(0, 15);
+    if (!name) { $('saveMsg').textContent = 'Digite seu nome.'; return; }
+    if (savedThisRun) return;
+    myName = name;
+    try { localStorage.setItem('naladera_name', name); } catch (e2) {}
+    $('saveBtn').disabled = true;
+    $('saveMsg').textContent = 'Salvando...';
+    try {
+      await callRanking({ action: 'add', name, score: lastScore });
+      savedThisRun = true;
+      $('saveMsg').textContent = 'Salvo no ranking! ✔';
+    } catch (err) {
+      $('saveBtn').disabled = false;
+      $('saveMsg').textContent = 'Não consegui salvar. Tente de novo.';
+    }
+  });
+  loadRanking();
+
+  // ---------- Estado ----------
+  let state = 'title';
+  let segs = [], nextIdx = 0, safeLane = 1, cxPrev = 0;
+  let ball, cam = { x: 0, y: 0, z: 0 }, speed = 16, trail = [], particles = [];
+  let deadTimer = 0, shake = 0, clock = 0;
+
+  const stars = [];
+  for (let i = 0; i < 90; i++) stars.push({ x: Math.random(), y: Math.random(), s: Math.random() * 1.6 + 0.4, t: Math.random() * 6 });
+
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+  function genSeg() {
+    const i = nextIdx++;
+    const z0 = i * SEG_LEN;
+    const lanes = [1, 1, 1];
+    const obs = [];
+    let cx = cxPrev;
+    if (i >= 6) {
+      const diff = Math.min(1, (i - 6) / 140);
+      cx = clamp(cxPrev + (Math.random() - 0.5) * 1.2, -5, 5);
+      const ns = clamp(safeLane + Math.floor(Math.random() * 3) - 1, 0, LANES - 1);
+      const lo = Math.min(ns, safeLane), hi = Math.max(ns, safeLane);
+      const holeP = 0.08 + 0.37 * diff;
+      const obsP = 0.18 + 0.42 * diff;
+      for (let l = 0; l < LANES; l++) {
+        const safe = l >= lo && l <= hi;
+        lanes[l] = (safe || Math.random() > holeP) ? 1 : 0;
+        if (lanes[l] && !safe && Math.random() < obsP) {
+          obs.push({ lane: l, z: z0 + 2 + Math.random() * (SEG_LEN - 4) });
+        }
+      }
+      safeLane = ns;
+    }
+    cxPrev = cx;
+    segs.push({ i, z0, z1: z0 + SEG_LEN, cx, lanes, obs });
+  }
+
+  function segAt(z) {
+    if (!segs.length) return null;
+    const idx = Math.floor(z / SEG_LEN) - segs[0].i;
+    return (idx >= 0 && idx < segs.length) ? segs[idx] : null;
+  }
+  function tileAt(x, z) {
+    const s = segAt(z);
+    if (!s) return false;
+    const l = Math.floor((x - (s.cx - TRACK_W / 2)) / LANE_W);
+    return l >= 0 && l < LANES && s.lanes[l] === 1;
+  }
+  function obsX(s, o) { return s.cx - TRACK_W / 2 + (o.lane + 0.5) * LANE_W; }
+
+  function reset() {
+    segs = []; nextIdx = 0; safeLane = 1; cxPrev = 0;
+    while (nextIdx * SEG_LEN < VIEW + 20) genSeg();
+    ball = { x: 0, y: Y(3) + R, z: 3, vx: 0, vy: 0, air: false, rot: 0, hidden: false };
+    trail = []; particles = []; speed = 16; deadTimer = 0; shake = 0;
+    cam.x = 0; cam.z = ball.z - 7; cam.y = Y(cam.z) + 4.2;
+  }
+
+  function start() {
+    reset();
+    state = 'play';
+    titleEl.classList.add('hidden');
+    overEl.classList.add('hidden');
+    hud.classList.remove('hidden');
+    bestEl.textContent = 'RECORDE ' + best;
+  }
+
+  function die(kind) {
+    if (state !== 'play') return;
+    state = 'dead';
+    deadTimer = 0;
+    if (kind === 'crash') {
+      ball.hidden = true;
+      shake = 0.5;
+      for (let i = 0; i < 46; i++) {
+        particles.push({
+          x: ball.x, y: ball.y, z: ball.z,
+          vx: (Math.random() - 0.5) * 14, vy: Math.random() * 10 + 2, vz: (Math.random() - 0.2) * 14,
+          life: 1, hue: Math.random() < 0.5 ? 180 : 320
+        });
+      }
+    }
+    const score = Math.floor(ball.z);
+    const isBest = score > best;
+    if (isBest) { best = score; saveBest(); }
+    $('overMsg').textContent = kind === 'crash' ? 'BATEU!' : 'VOCÊ CAIU!';
+    $('finalScore').textContent = score;
+    $('finalBest').textContent = best;
+    $('newBest').classList.toggle('hidden', !isBest);
+    lastScore = score;
+    savedThisRun = false;
+    if (RANKING_URL && score > 0) {
+      $('saveBox').classList.remove('hidden');
+      $('saveBtn').disabled = false;
+      $('saveMsg').textContent = '';
+      $('nameInput').value = myName;
+    } else {
+      $('saveBox').classList.add('hidden');
+    }
+    loadRanking();
+  }
+
+  // ---------- Controles ----------
+  const keys = { left: false, right: false };
+  const pointers = new Map();
+  window.addEventListener('keydown', e => {
+    if (e.target && e.target.tagName === 'INPUT') return;
+    if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = true;
+    if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = true;
+    if ((e.code === 'Space' || e.code === 'Enter') && state !== 'play') {
+      if (state === 'title' || deadTimer > 0.6) start();
+      e.preventDefault();
+    }
+  });
+  window.addEventListener('keyup', e => {
+    if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = false;
+    if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = false;
+  });
+  cvs.addEventListener('pointerdown', e => { pointers.set(e.pointerId, e.clientX); e.preventDefault(); });
+  cvs.addEventListener('pointermove', e => { if (pointers.has(e.pointerId)) pointers.set(e.pointerId, e.clientX); });
+  const up = e => pointers.delete(e.pointerId);
+  cvs.addEventListener('pointerup', up);
+  cvs.addEventListener('pointercancel', up);
+  cvs.addEventListener('pointerleave', up);
+  $('playBtn').addEventListener('click', start);
+  $('againBtn').addEventListener('click', start);
+
+  function inputDir() {
+    let l = keys.left, r = keys.right;
+    for (const x of pointers.values()) { if (x < W / 2) l = true; else r = true; }
+    return (r ? 1 : 0) - (l ? 1 : 0);
+  }
+
+  // ---------- Atualização ----------
+  function update(dt) {
+    clock += dt;
+    if (state === 'play') {
+      speed = Math.min(46, 16 + ball.z * 0.012);
+      const dir = inputDir();
+      ball.vx += (dir * LAT_SPEED - ball.vx) * Math.min(1, dt * 12);
+      ball.x += ball.vx * dt;
+      ball.z += speed * dt;
+      ball.rot += speed * dt / R;
+
+      const ground = Y(ball.z) + R;
+      if (ball.air) {
+        ball.vy -= GRAVITY * dt;
+        ball.y += ball.vy * dt;
+        if (tileAt(ball.x, ball.z) && ball.y <= ground && ball.y > ground - 0.5) {
+          ball.y = ground; ball.air = false;
+        }
+      } else if (tileAt(ball.x, ball.z)) {
+        ball.y = ground;
+      } else {
+        ball.air = true; ball.vy = -speed * SLOPE; ball.y = ground;
+      }
+      if (ball.y < ground - 14) die('fall');
+
+      // colisão com obstáculos
+      if (ball.y > ground - 0.8) {
+        const s0 = segAt(ball.z), s1 = segAt(ball.z + SEG_LEN), s2 = segAt(ball.z - SEG_LEN);
+        for (const s of [s0, s1, s2]) {
+          if (!s) continue;
+          for (const o of s.obs) {
+            if (Math.abs(ball.x - obsX(s, o)) < 0.75 + R * 0.8 && Math.abs(ball.z - o.z) < 0.6 + R * 0.8) die('crash');
+          }
+        }
+      }
+
+      while (segs[segs.length - 1].z1 < ball.z + VIEW + SEG_LEN) genSeg();
+      while (segs.length && segs[0].z1 < ball.z - 15) segs.shift();
+
+      trail.push({ x: ball.x, y: ball.y, z: ball.z });
+      if (trail.length > 12) trail.shift();
+      scoreEl.textContent = Math.floor(ball.z);
+    } else if (state === 'dead') {
+      deadTimer += dt;
+      if (deadTimer > 0.7 && overEl.classList.contains('hidden')) {
+        overEl.classList.remove('hidden');
+        hud.classList.add('hidden');
+      }
+    } else {
+      ball.rot += dt * 4;
+    }
+
+    for (const p of particles) {
+      p.vy -= GRAVITY * 0.6 * dt;
+      p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+      p.life -= dt * 0.7;
+    }
+    particles = particles.filter(p => p.life > 0);
+    shake = Math.max(0, shake - dt);
+
+    if (state !== 'dead') {
+      cam.x += (ball.x * 0.7 - cam.x) * Math.min(1, dt * 5);
+      cam.z = ball.z - 7;
+      cam.y = Y(cam.z) + 4.2 + (state === 'title' ? Math.sin(clock) * 0.15 : 0);
+    }
+  }
+
+  // ---------- Desenho 3D ----------
+  function toCam(x, y, z) {
+    const dx = x - cam.x, dy = y - cam.y, dz = z - cam.z;
+    return { x: dx, y: dy * COS + dz * SIN, z: dz * COS - dy * SIN };
+  }
+  function clip(pts) {
+    const out = [];
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i], b = pts[(i + 1) % pts.length];
+      const ain = a.z >= NEAR, bin = b.z >= NEAR;
+      if (ain) out.push(a);
+      if (ain !== bin) {
+        const t = (NEAR - a.z) / (b.z - a.z);
+        out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: NEAR });
+      }
+    }
+    return out;
+  }
+  let ox = 0, oy = 0;
+  function sx(p) { return W / 2 + ox + p.x * F / p.z; }
+  function sy(p) { return H / 2 + oy - p.y * F / p.z; }
+  function poly(pts, fill, stroke, lw) {
+    const cp = clip(pts.map(p => toCam(p[0], p[1], p[2])));
+    if (cp.length < 3) return;
+    ctx.beginPath();
+    for (let i = 0; i < cp.length; i++) {
+      const X = sx(cp[i]), Yy = sy(cp[i]);
+      if (i) ctx.lineTo(X, Yy); else ctx.moveTo(X, Yy);
+    }
+    ctx.closePath();
+    if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+    if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw || 1; ctx.stroke(); }
+  }
+
+  function drawSky(hue) {
+    const hy = H / 2 + oy - F * Math.tan(TH);
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, `hsl(${hue + 40},60%,6%)`);
+    g.addColorStop(clamp(hy / H, 0.05, 0.95), `hsl(${hue + 90},65%,22%)`);
+    g.addColorStop(1, `hsl(${hue},55%,5%)`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    for (const s of stars) {
+      const x = ((s.x * W - cam.x * 3) % W + W) % W;
+      const y = s.y * Math.max(0, hy - 20);
+      ctx.globalAlpha = 0.4 + 0.4 * Math.sin(clock * 2 + s.t);
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(x, y, s.s, s.s);
+    }
+    ctx.globalAlpha = 1;
+
+    // sol do horizonte
+    const sunX = W / 2 + ox - cam.x * 4, sunY = hy - 10, sr = Math.min(W, H) * 0.16;
+    const sg = ctx.createLinearGradient(0, sunY - sr, 0, sunY + sr);
+    sg.addColorStop(0, `hsl(${hue + 160},100%,70%)`);
+    sg.addColorStop(1, `hsl(${hue + 120},100%,55%)`);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, sr, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.fillStyle = sg;
+    ctx.fillRect(sunX - sr, sunY - sr, sr * 2, sr * 2);
+    ctx.fillStyle = `hsl(${hue + 90},65%,22%)`;
+    for (let i = 0; i < 6; i++) {
+      const yy = sunY + i * sr * 0.17;
+      ctx.fillRect(sunX - sr, yy, sr * 2, 2 + i * 1.6);
+    }
+    ctx.restore();
+  }
+
+  function drawTiles(hue) {
+    for (let k = segs.length - 1; k >= 0; k--) {
+      const s = segs[k];
+      if (s.z1 < cam.z) continue;
+      const fade = clamp(1 - (s.z0 - ball.z) / VIEW, 0, 1);
+      if (fade <= 0) continue;
+      ctx.globalAlpha = fade;
+      const y0 = Y(s.z0), y1 = Y(s.z1);
+      const light = s.i % 2 ? 14 : 10;
+      for (let l = 0; l < LANES; l++) {
+        if (!s.lanes[l]) continue;
+        const x0 = s.cx - TRACK_W / 2 + l * LANE_W + 0.05, x1 = x0 + LANE_W - 0.1;
+        const side = `hsl(${hue},55%,8%)`;
+        if ((l === 0 || !s.lanes[l - 1]) && cam.x < x0)
+          poly([[x0, y0, s.z0], [x0, y1, s.z1], [x0, y1 - THICK, s.z1], [x0, y0 - THICK, s.z0]], side, `hsl(${hue},90%,45%)`, 1);
+        if ((l === LANES - 1 || !s.lanes[l + 1]) && cam.x > x1)
+          poly([[x1, y0, s.z0], [x1, y1, s.z1], [x1, y1 - THICK, s.z1], [x1, y0 - THICK, s.z0]], side, `hsl(${hue},90%,45%)`, 1);
+        poly([[x0, y0, s.z0], [x1, y0, s.z0], [x1, y0 - THICK, s.z0], [x0, y0 - THICK, s.z0]], `hsl(${hue},60%,16%)`, `hsl(${hue},100%,60%)`, 1.2);
+        poly([[x0, y0, s.z0], [x1, y0, s.z0], [x1, y1, s.z1], [x0, y1, s.z1]],
+          `hsl(${hue},55%,${light}%)`, `hsl(${hue},100%,62%)`, 1.6);
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawObstacle(s, o) {
+    const x = obsX(s, o), w = 0.75, d = 0.6, h = 1.2;
+    const xa = x - w, xb = x + w, zf = o.z - d, zb = o.z + d;
+    const bf = Y(zf), bb = Y(zb), top = Y(o.z) + h;
+    const pulse = 50 + Math.sin(clock * 6 + o.z) * 6;
+    ctx.globalAlpha = clamp(1 - (o.z - ball.z) / VIEW, 0, 1);
+    if (cam.x < xa) poly([[xa, top, zf], [xa, top, zb], [xa, bb, zb], [xa, bf, zf]], 'hsl(340,80%,30%)', 'hsl(340,100%,70%)', 1);
+    if (cam.x > xb) poly([[xb, top, zf], [xb, top, zb], [xb, bb, zb], [xb, bf, zf]], 'hsl(340,80%,30%)', 'hsl(340,100%,70%)', 1);
+    poly([[xa, top, zf], [xb, top, zf], [xb, top, zb], [xa, top, zb]], 'hsl(340,100%,72%)', '#fff', 1);
+    poly([[xa, top, zf], [xb, top, zf], [xb, bf, zf], [xa, bf, zf]], `hsl(345,95%,${pulse}%)`, 'hsl(340,100%,80%)', 1.2);
+    ctx.globalAlpha = 1;
+  }
+
+  function drawBall(hue) {
+    if (ball.hidden) return;
+    // rastro
+    for (let i = 0; i < trail.length - 1; i++) {
+      const t = trail[i], p = toCam(t.x, t.y, t.z);
+      if (p.z < NEAR) continue;
+      const a = (i + 1) / trail.length;
+      ctx.globalAlpha = a * 0.25;
+      ctx.fillStyle = `hsl(${hue + 150},100%,65%)`;
+      ctx.beginPath();
+      ctx.arc(sx(p), sy(p), R * F / p.z * a, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    // sombra
+    if (!ball.air) {
+      const sp = toCam(ball.x, Y(ball.z) + 0.02, ball.z);
+      if (sp.z > NEAR) {
+        const r = R * F / sp.z;
+        ctx.fillStyle = 'rgba(0,0,0,.45)';
+        ctx.beginPath();
+        ctx.ellipse(sx(sp), sy(sp), r * 1.1, r * 0.35, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    const p = toCam(ball.x, ball.y, ball.z);
+    if (p.z < NEAR) return;
+    const X = sx(p), Yy = sy(p), r = R * F / p.z;
+    const g = ctx.createRadialGradient(X - r * 0.35, Yy - r * 0.35, r * 0.1, X, Yy, r);
+    g.addColorStop(0, '#ffffff');
+    g.addColorStop(0.35, `hsl(${hue + 150},100%,70%)`);
+    g.addColorStop(1, `hsl(${hue + 190},90%,30%)`);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(X, Yy, r, 0, Math.PI * 2);
+    ctx.fill();
+    // faixas girando
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(X, Yy, r, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.strokeStyle = 'rgba(255,255,255,.45)';
+    ctx.lineWidth = Math.max(1, r * 0.08);
+    for (let k = 0; k < 3; k++) {
+      const a = ball.rot + k * Math.PI / 3;
+      ctx.beginPath();
+      ctx.ellipse(X, Yy, r, Math.abs(Math.sin(a)) * r, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+    ctx.strokeStyle = `hsl(${hue + 150},100%,80%)`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(X, Yy, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  function drawParticle(p) {
+    const c = toCam(p.x, p.y, p.z);
+    if (c.z < NEAR) return;
+    const s = 0.18 * F / c.z;
+    ctx.globalAlpha = clamp(p.life, 0, 1);
+    ctx.fillStyle = `hsl(${p.hue},100%,65%)`;
+    ctx.fillRect(sx(c) - s / 2, sy(c) - s / 2, s, s);
+    ctx.globalAlpha = 1;
+  }
+
+  function render() {
+    const hue = (200 + ball.z * 0.05) % 360;
+    ox = shake > 0 ? (Math.random() - 0.5) * 18 * shake : 0;
+    oy = shake > 0 ? (Math.random() - 0.5) * 18 * shake : 0;
+    drawSky(hue);
+
+    const below = ball.y < Y(ball.z) + R - 0.5;
+    const items = [];
+    for (const s of segs) {
+      for (const o of s.obs) {
+        if (o.z < cam.z) continue;
+        items.push({ d: toCam(obsX(s, o), Y(o.z), o.z).z, draw: () => drawObstacle(s, o) });
+      }
+    }
+    for (const p of particles) items.push({ d: toCam(p.x, p.y, p.z).z, draw: () => drawParticle(p) });
+    if (below) drawBall(hue);
+    else items.push({ d: toCam(ball.x, ball.y, ball.z).z, draw: () => drawBall(hue) });
+
+    drawTiles(hue);
+    items.sort((a, b) => b.d - a.d);
+    for (const it of items) it.draw();
+
+    // vinheta de velocidade
+    if (state === 'play') {
+      const v = clamp((speed - 16) / 30, 0, 1);
+      const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75);
+      vg.addColorStop(0, 'rgba(0,0,0,0)');
+      vg.addColorStop(1, `rgba(0,0,0,${0.25 + v * 0.35})`);
+      ctx.fillStyle = vg;
+      ctx.fillRect(0, 0, W, H);
+    }
+  }
+
+  // ---------- Loop ----------
+  let last = performance.now();
+  function frame(t) {
+    const dt = Math.min(0.033, Math.max(0, (t - last) / 1000));
+    last = t;
+    update(dt);
+    render();
+    requestAnimationFrame(frame);
+  }
+  reset();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

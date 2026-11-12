@@ -47,11 +47,13 @@
   .rank li.me { color: #ffe066; font-weight: 700; }
   .rank .empty { opacity: .6; font-size: 14px; text-align: center; display: block; border: none; }
   #title .btn { margin-top: 22px; }
-  #touchBtns { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); display: flex; gap: 18px; z-index: 5; }
+  #touchBtns { position: fixed; bottom: 34px; left: 50%; transform: translateX(-50%); display: flex; gap: 18px; z-index: 5; }
   #touchBtns button { width: 64px; height: 64px; border-radius: 50%; font-size: 28px; font-weight: 900; color: #fff;
     border: 2px solid rgba(95,246,255,.8); background: rgba(10,6,24,.55); touch-action: none; font-family: inherit; }
   #touchBtns #jumpBtn { border-color: rgba(179,123,255,.9); }
   #touchBtns button:active { background: rgba(95,246,255,.35); }
+  #footer { position: fixed; bottom: 8px; left: 0; right: 0; text-align: center; font-size: 13px; letter-spacing: 2px;
+    color: rgba(255,255,255,.65); pointer-events: none; z-index: 6; text-shadow: 0 0 8px rgba(179,123,255,.8); }
 </style>
 </head>
 <body>
@@ -94,6 +96,8 @@
   <button class="btn" id="againBtn">JOGAR DE NOVO</button>
   <div class="rank hidden" id="rankOver"><h3>TOP 10</h3><ol id="rankListOver"></ol></div>
 </div>
+
+<div id="footer">@cqcfoda<span id="usuarios"></span></div>
 
 <script>
 // ====== RANKING ======
@@ -161,11 +165,19 @@ const RANKING_URL = 'https://script.google.com/macros/s/AKfycbyFB4SryFu1T3StSoZh
     const res = await fetch(url);
     const data = await res.json();
     showRanking(data.top || []);
+    if (data.usuarios) $('usuarios').textContent = ` · ${Number(data.usuarios).toLocaleString('pt-BR')} usuários`;
     return data;
   }
+  // Primeira vez neste navegador = visitante novo (conta +1 no contador)
+  let visita = 'nova';
+  try {
+    if (localStorage.getItem('naladera_visitou')) visita = 'repetida';
+    else localStorage.setItem('naladera_visitou', '1');
+  } catch (e) {}
   function loadRanking() {
     if (!RANKING_URL) return;
-    callRanking({ action: 'top' }).catch(() => {});
+    callRanking({ action: 'top', visita }).catch(() => {});
+    visita = 'repetida';
   }
   $('saveForm').addEventListener('submit', async e => {
     e.preventDefault();

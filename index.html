@@ -47,10 +47,20 @@
   .rank li.me { color: #ffe066; font-weight: 700; }
   .rank .empty { opacity: .6; font-size: 14px; text-align: center; display: block; border: none; }
   #title .btn { margin-top: 22px; }
+  #touchBtns { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); display: flex; gap: 18px; z-index: 5; }
+  #touchBtns button { width: 64px; height: 64px; border-radius: 50%; font-size: 28px; font-weight: 900; color: #fff;
+    border: 2px solid rgba(95,246,255,.8); background: rgba(10,6,24,.55); touch-action: none; font-family: inherit; }
+  #touchBtns #jumpBtn { border-color: rgba(179,123,255,.9); }
+  #touchBtns button:active { background: rgba(95,246,255,.35); }
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
+
+<div id="touchBtns" class="hidden">
+  <button id="brakeBtn" aria-label="Frear">↓</button>
+  <button id="jumpBtn" aria-label="Pular">↑</button>
+</div>
 
 <div id="hud" class="hidden">
   <div id="score">0</div>
@@ -62,8 +72,8 @@
   <div class="sub">desça a ladeira</div>
   <div class="help">
     Desvie dos blocos e não caia da pista.<br>
-    <b>Computador:</b> setas ← → ou A / D<br>
-    <b>Celular:</b> toque e segure nos lados da tela
+    <b>Computador:</b> ← → desviar • ↑ pular • ↓ frear<br>
+    <b>Celular:</b> segure nos lados da tela para desviar<br>e use os botões ↑ pular e ↓ frear
   </div>
   <button class="btn" id="playBtn">JOGAR</button>
   <div class="rank hidden" id="rankTitle"><h3>TOP 10</h3><ol id="rankListTitle"></ol></div>
@@ -186,6 +196,7 @@ const RANKING_URL = 'https://script.google.com/macros/s/AKfycbyFB4SryFu1T3StSoZh
   const stars = [];
   for (let i = 0; i < 90; i++) stars.push({ x: Math.random(), y: Math.random(), s: Math.random() * 1.6 + 0.4, t: Math.random() * 6 });
 
+  const isTouch = (window.matchMedia && matchMedia('(pointer: coarse)').matches) || 'ontouchstart' in window;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
   function genSeg() {
@@ -241,6 +252,7 @@ const RANKING_URL = 'https://script.google.com/macros/s/AKfycbyFB4SryFu1T3StSoZh
     titleEl.classList.add('hidden');
     overEl.classList.add('hidden');
     hud.classList.remove('hidden');
+    $('touchBtns').classList.toggle('hidden', !isTouch);
     bestEl.textContent = 'RECORDE ' + best;
   }
 
@@ -248,6 +260,8 @@ const RANKING_URL = 'https://script.google.com/macros/s/AKfycbyFB4SryFu1T3StSoZh
     if (state !== 'play') return;
     state = 'dead';
     deadTimer = 0;
+    $('touchBtns').classList.add('hidden');
+    brakeTouch = false;
     if (kind === 'crash') {
       ball.hidden = true;
       shake = 0.5;
@@ -521,7 +535,7 @@ const RANKING_URL = 'https://script.google.com/macros/s/AKfycbyFB4SryFu1T3StSoZh
     }
     ctx.globalAlpha = 1;
     // sombra
-    if (!ball.air) {
+    if (tileAt(ball.x, ball.z) && ball.y > Y(ball.z) + R - 0.1) {
       const sp = toCam(ball.x, Y(ball.z) + 0.02, ball.z);
       if (sp.z > NEAR) {
         const r = R * F / sp.z;

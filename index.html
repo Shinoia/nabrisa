@@ -52,8 +52,10 @@
     border: 2px solid rgba(95,246,255,.8); background: rgba(10,6,24,.55); touch-action: none; font-family: inherit; }
   #touchBtns #jumpBtn { border-color: rgba(179,123,255,.9); }
   #touchBtns button:active { background: rgba(95,246,255,.35); }
-  #footer { position: fixed; bottom: 8px; left: 0; right: 0; text-align: center; font-size: 13px; letter-spacing: 2px;
+  #footer { position: fixed; bottom: 8px; left: 0; right: 0; text-align: center; font-size: clamp(11px, 3.1vw, 13px); letter-spacing: .5px; white-space: nowrap;
     color: rgba(255,255,255,.65); pointer-events: none; z-index: 6; text-shadow: 0 0 8px rgba(179,123,255,.8); }
+  #footer a { color: inherit; text-decoration: none; pointer-events: auto; }
+  #footer a:hover { color: #5ff6ff; }
 </style>
 </head>
 <body>
@@ -97,7 +99,7 @@
   <div class="rank hidden" id="rankOver"><h3>TOP 10</h3><ol id="rankListOver"></ol></div>
 </div>
 
-<div id="footer">@cqcfoda<span id="usuarios"></span></div>
+<div id="footer"><a href="https://www.hevems.webnode.com" target="_blank" rel="noopener">www.hevems.webnode.com</a><span id="usuarios"></span></div>
 
 <script>
 // ====== RANKING ======

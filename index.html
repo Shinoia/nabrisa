@@ -56,6 +56,10 @@
     color: rgba(255,255,255,.65); pointer-events: none; z-index: 6; text-shadow: 0 0 8px rgba(179,123,255,.8); }
   #footer a { color: inherit; text-decoration: none; pointer-events: auto; }
   #footer a:hover { color: #5ff6ff; }
+  #banner { position: fixed; top: 26%; left: 0; right: 0; text-align: center; font-size: clamp(28px, 8vw, 52px); font-weight: 900;
+    letter-spacing: 3px; pointer-events: none; opacity: 0; transform: scale(.85); transition: opacity .35s, transform .35s;
+    text-shadow: 0 0 24px rgba(255,255,255,.7); z-index: 4; }
+  #banner.show { opacity: 1; transform: scale(1); }
 </style>
 </head>
 <body>
@@ -77,7 +81,8 @@
   <div class="help">
     Desvie dos blocos e não caia da pista.<br>
     <b>Computador:</b> ← → desviar • ↑ pular • ↓ frear<br>
-    <b>Celular:</b> segure nos lados da tela para desviar<br>e use os botões ↑ pular e ↓ frear
+    <b>Celular:</b> segure nos lados da tela para desviar<br>e use os botões ↑ pular e ↓ frear<br>
+    <span style="opacity:.75">Depois de 3.000 m, cair não é o fim… 🔥</span>
   </div>
   <button class="btn" id="playBtn">JOGAR</button>
   <div class="rank hidden" id="rankTitle"><h3>TOP 10</h3><ol id="rankListTitle"></ol></div>
@@ -98,6 +103,8 @@
   <button class="btn" id="againBtn">JOGAR DE NOVO</button>
   <div class="rank hidden" id="rankOver"><h3>TOP 10</h3><ol id="rankListOver"></ol></div>
 </div>
+
+<div id="banner"></div>
 
 <div id="footer">@cqcfoda</div>
 
@@ -198,21 +205,42 @@ const RANKING_URL = 'https://script.google.com/macros/s/AKfycbyFB4SryFu1T3StSoZh
   let segs = [], nextIdx = 0, safeLane = 1, cxPrev = 0;
   let ball, cam = { x: 0, y: 0, z: 0 }, speed = 16, trail = [], particles = [];
   let deadTimer = 0, shake = 0, clock = 0;
+  // Níveis: 0 = principal (neon), 1 = inferno, 2 = neve, 3 = trilhos
+  let level = 0, levelStartIdx = 0, levelStartZ = 0, nextRamp = 0;
+  let trans = null;                       // transição entre níveis
+  const DROP_AT = [3000, 6000, 9000];     // distância mínima para cair no nível de baixo
+  const OBS_H = [1.2, 1.4, 3.2, 0.9];     // altura: bloco, vulcão, pilastra de gelo, barreira do trilho
+  const OBS_W = [0.75, 0.8, 0.5, 9];      // meia largura de cada obstáculo (barreira ocupa a pista toda)
+  const LEVEL_NAMES = ['NÍVEL PRINCIPAL', '🔥 INFERNO 🔥', '❄ NEVE ❄', '🛤 TRILHOS 🛤'];
+  const RAIL_OFF = 0.45;                  // distância de cada trilho até o centro da faixa
 
   const stars = [];
   for (let i = 0; i < 90; i++) stars.push({ x: Math.random(), y: Math.random(), s: Math.random() * 1.6 + 0.4, t: Math.random() * 6 });
 
   const isTouch = (window.matchMedia && matchMedia('(pointer: coarse)').matches) || 'ontouchstart' in window;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const rnd = (a, b) => a + Math.random() * (b - a);
 
   function genSeg() {
     const i = nextIdx++;
     const z0 = i * SEG_LEN;
     const lanes = [1, 1, 1];
     const obs = [];
+    let ramp = -1;
     let cx = cxPrev;
-    if (i >= 6) {
-      const diff = Math.min(1, (i - 6) / 140);
+    const k = i - levelStartIdx;
+    if (level === 3 && k >= 6) {
+      // trilhos: pista reta, sem buracos, barreiras que precisam ser puladas
+      const diff = Math.min(0.5, (k - 6) / 300);
+      if (i >= nextRamp && Math.random() < 0.5) {
+        ramp = Math.floor(Math.random() * LANES);
+        nextRamp = i + 10 + Math.floor(Math.random() * 7);
+      } else if (Math.random() < 0.3 + 0.4 * diff) {
+        obs.push({ lane: -1, z: z0 + 3 + Math.random() * (SEG_LEN - 6) });
+      }
+    } else if (k >= 6) {
+      // nível de cima fica difícil com a distância; níveis de baixo ficam fáceis como o começo
+      const diff = level === 0 ? Math.min(1, (i - 6) / 140) : Math.min(0.4, (k - 6) / 300);
       cx = clamp(cxPrev + (Math.random() - 0.5) * 1.2, -5, 5);
       const ns = clamp(safeLane + Math.floor(Math.random() * 3) - 1, 0, LANES - 1);
       const lo = Math.min(ns, safeLane), hi = Math.max(ns, safeLane);
@@ -226,9 +254,17 @@ const RANKING_URL = 'https://script.google.com/macros/s/AKfycbyFB4SryFu1T3StSoZh
         }
       }
       safeLane = ns;
+      // rampas: no nível principal dão um super pulo; nos de baixo sobem de nível
+      if (i >= nextRamp) {
+        const free = [0, 1, 2].filter(l => lanes[l] && !obs.some(o => o.lane === l));
+        if (free.length) {
+          ramp = free[Math.floor(Math.random() * free.length)];
+          nextRamp = i + 10 + Math.floor(Math.random() * 7);
+        }
+      }
     }
     cxPrev = cx;
-    segs.push({ i, z0, z1: z0 + SEG_LEN, cx, lanes, obs });
+    segs.push({ i, z0, z1: z0 + SEG_LEN, cx, lanes, obs, ramp });
   }
 
   function segAt(z) {
@@ -236,20 +272,47 @@ const RANKING_URL = 'https://script.google.com/macros/s/AKfycbyFB4SryFu1T3StSoZh
     const idx = Math.floor(z / SEG_LEN) - segs[0].i;
     return (idx >= 0 && idx < segs.length) ? segs[idx] : null;
   }
+  function laneOf(s, x) { return Math.floor((x - (s.cx - TRACK_W / 2)) / LANE_W); }
   function tileAt(x, z) {
     const s = segAt(z);
     if (!s) return false;
-    const l = Math.floor((x - (s.cx - TRACK_W / 2)) / LANE_W);
+    const l = laneOf(s, x);
     return l >= 0 && l < LANES && s.lanes[l] === 1;
   }
   function obsX(s, o) { return s.cx - TRACK_W / 2 + (o.lane + 0.5) * LANE_W; }
 
+  // monta a pista de um nível a partir da posição z
+  function buildLevel(lv, z, x) {
+    level = lv;
+    segs = [];
+    nextIdx = Math.max(0, Math.floor(z / SEG_LEN) - 1);
+    levelStartIdx = nextIdx;
+    levelStartZ = z;
+    safeLane = 1;
+    cxPrev = clamp(x, -5, 5);
+    nextRamp = nextIdx + 8;
+    while (nextIdx * SEG_LEN < z + VIEW + 20) genSeg();
+  }
+
   function reset() {
-    segs = []; nextIdx = 0; safeLane = 1; cxPrev = 0;
-    while (nextIdx * SEG_LEN < VIEW + 20) genSeg();
+    buildLevel(0, 3, 0);
     ball = { x: 0, y: Y(3) + R, z: 3, vx: 0, vy: 0, air: false, rot: 0, hidden: false };
-    trail = []; particles = []; speed = 16; deadTimer = 0; shake = 0;
+    trail = []; particles = []; speed = 16; deadTimer = 0; shake = 0; trans = null;
     cam.x = 0; cam.z = ball.z - 7; cam.y = Y(cam.z) + 4.2;
+  }
+
+  // ---------- Aviso de nível ----------
+  let bannerTimer = null;
+  function showBanner(text) {
+    const el = $('banner');
+    el.textContent = text;
+    el.classList.add('show');
+    clearTimeout(bannerTimer);
+    bannerTimer = setTimeout(() => el.classList.remove('show'), 2200);
+  }
+
+  function startTrans(to) {
+    trans = { t: 0, to, up: to < level, switched: false };
   }
 
   function start() {
@@ -258,6 +321,7 @@ const RANKING_URL = 'https://script.google.com/macros/s/AKfycbyFB4SryFu1T3StSoZh
     titleEl.classList.add('hidden');
     overEl.classList.add('hidden');
     hud.classList.remove('hidden');
+    $('banner').classList.remove('show');
     $('touchBtns').classList.toggle('hidden', !isTouch);
     bestEl.textContent = 'RECORDE ' + best;
   }
@@ -271,18 +335,19 @@ const RANKING_URL = 'https://script.google.com/macros/s/AKfycbyFB4SryFu1T3StSoZh
     if (kind === 'crash') {
       ball.hidden = true;
       shake = 0.5;
+      const hues = [[180, 320], [20, 45], [195, 210], [40, 0]][level];
       for (let i = 0; i < 46; i++) {
         particles.push({
           x: ball.x, y: ball.y, z: ball.z,
           vx: (Math.random() - 0.5) * 14, vy: Math.random() * 10 + 2, vz: (Math.random() - 0.2) * 14,
-          life: 1, hue: Math.random() < 0.5 ? 180 : 320
+          life: 1, hue: hues[Math.random() < 0.5 ? 0 : 1], g: 0.6, size: 0.18, decay: 0.7, light: level === 2 ? 85 : 65
         });
       }
     }
     const score = Math.floor(ball.z);
     const isBest = score > best;
     if (isBest) { best = score; saveBest(); }
-    $('overMsg').textContent = kind === 'crash' ? 'BATEU!' : 'VOCÊ CAIU!';
+    $('overMsg').textContent = kind === 'crash' ? ['BATEU!', 'QUEIMOU!', 'CONGELOU!', 'DESCARRILOU!'][level] : 'VOCÊ CAIU!';
     $('finalScore').textContent = score;
     $('finalBest').textContent = best;
     $('newBest').classList.toggle('hidden', !isBest);
@@ -342,7 +407,9 @@ const RANKING_URL = 'https://script.google.com/macros/s/AKfycbyFB4SryFu1T3StSoZh
   function update(dt) {
     clock += dt;
     if (state === 'play') {
-      const baseSpeed = Math.min(46, 16 + ball.z * 0.012);
+      const baseSpeed = level === 0
+        ? Math.min(46, 16 + ball.z * 0.012)
+        : Math.min(30, 20 + (ball.z - levelStartZ) * 0.006);
       const braking = keys.brake || brakeTouch;
       const goal = braking ? Math.max(10, baseSpeed * 0.5) : baseSpeed;
       speed += (goal - speed) * Math.min(1, dt * (braking ? 3 : 1.5));
@@ -355,24 +422,83 @@ const RANKING_URL = 'https://script.google.com/macros/s/AKfycbyFB4SryFu1T3StSoZh
         jumpQueued = 0;
       }
       const dir = inputDir();
-      ball.vx += (dir * LAT_SPEED - ball.vx) * Math.min(1, dt * 12);
+      if (level === 3 && dir === 0) {
+        // nos trilhos a bola se encaixa na faixa mais próxima
+        const s = segAt(ball.z);
+        if (s) {
+          const l = clamp(laneOf(s, ball.x), 0, LANES - 1);
+          const target = s.cx - TRACK_W / 2 + (l + 0.5) * LANE_W;
+          ball.vx += ((target - ball.x) * 8 - ball.vx) * Math.min(1, dt * 10);
+        }
+      } else {
+        ball.vx += (dir * LAT_SPEED - ball.vx) * Math.min(1, dt * 12);
+      }
+      const relBefore = ball.y - (Y(ball.z) + R);
       ball.x += ball.vx * dt;
       ball.z += speed * dt;
       ball.rot += speed * dt / R;
+      if (level === 3) {
+        // a bola nunca sai dos trilhos
+        const s = segAt(ball.z);
+        if (s) {
+          const lim = TRACK_W / 2 - LANE_W / 2;
+          if (Math.abs(ball.x - s.cx) > lim) { ball.x = s.cx + Math.sign(ball.x - s.cx) * lim; ball.vx = 0; }
+        }
+      }
 
       const ground = Y(ball.z) + R;
       if (ball.air) {
         ball.vy -= GRAVITY * dt;
         ball.y += ball.vy * dt;
-        if (tileAt(ball.x, ball.z) && ball.y <= ground && ball.y > ground - 0.5) {
-          ball.y = ground; ball.air = false;
+        if (tileAt(ball.x, ball.z) && ball.y <= ground && relBefore > -0.4) {
+          ball.y = ground; ball.air = false; ball.vy = 0;
         }
       } else if (tileAt(ball.x, ball.z)) {
         ball.y = ground;
       } else {
         ball.air = true; ball.vy = -speed * SLOPE; ball.y = ground;
       }
-      if (ball.y < ground - 14) die('fall');
+
+      // rampa: no nível principal dá um super pulo; nos de baixo sobe para o nível de cima
+      if (!ball.air && !trans) {
+        const s = segAt(ball.z);
+        if (s && s.ramp >= 0 && !s.rampUsed && laneOf(s, ball.x) === s.ramp && ball.z > s.z0 + 0.3) {
+          ball.air = true;
+          shake = 0.25;
+          if (level === 0) {
+            ball.vy = -speed * SLOPE + 19;
+            s.rampUsed = true;
+          } else {
+            ball.vy = -speed * SLOPE + 24;
+            startTrans(level - 1);
+          }
+        }
+      }
+
+      // queda: vai para o nível de baixo (se tiver distância) ou acaba o jogo
+      if (!trans) {
+        const canDrop = level < 3 && ball.z >= DROP_AT[level];
+        if (canDrop && ball.y < ground - 6) startTrans(level + 1);
+        else if (ball.y < ground - 14) die('fall');
+      }
+
+      // transição entre níveis
+      if (trans) {
+        trans.t += dt;
+        if (!trans.switched && trans.t >= 0.35) {
+          trans.switched = true;
+          buildLevel(trans.to, ball.z, ball.x);
+          ball.x = cxPrev; ball.vx = 0;
+          ball.y = Y(ball.z) + R + (trans.up ? 3 : 5);
+          ball.vy = -speed * SLOPE;
+          ball.air = true;
+          trail = [];
+          particles = [];
+          cam.x = ball.x * 0.7;
+          showBanner((trans.up ? '⬆ ' : '') + LEVEL_NAMES[trans.to]);
+        }
+        if (trans.t >= 0.9) trans = null;
+      }
 
       // colisão com obstáculos
       if (ball.y > ground - 0.8) {
@@ -380,8 +506,8 @@ const RANKING_URL = 'https://script.google.com/macros/s/AKfycbyFB4SryFu1T3StSoZh
         for (const s of [s0, s1, s2]) {
           if (!s) continue;
           for (const o of s.obs) {
-            const overTop = ball.y - R > Y(o.z) + 1.1;
-            if (!overTop && Math.abs(ball.x - obsX(s, o)) < 0.75 + R * 0.8 && Math.abs(ball.z - o.z) < 0.6 + R * 0.8) die('crash');
+            const overTop = ball.y - R > Y(o.z) + OBS_H[level] - 0.1;
+            if (!overTop && (o.lane < 0 || Math.abs(ball.x - obsX(s, o)) < OBS_W[level] + R * 0.8) && Math.abs(ball.z - o.z) < 0.6 + R * 0.8) die('crash');
           }
         }
       }
@@ -392,6 +518,38 @@ const RANKING_URL = 'https://script.google.com/macros/s/AKfycbyFB4SryFu1T3StSoZh
       trail.push({ x: ball.x, y: ball.y, z: ball.z });
       if (trail.length > 12) trail.shift();
       scoreEl.textContent = Math.floor(ball.z);
+
+      // efeitos: chamas da bola de fogo e dos vulcões
+      if (level === 1 && !ball.hidden && particles.length < 320) {
+        for (let n = 0; n < 2; n++) particles.push({
+          x: ball.x + rnd(-0.25, 0.25), y: ball.y + rnd(-0.2, 0.3), z: ball.z - 0.2,
+          vx: rnd(-1, 1), vy: rnd(1, 3), vz: speed * 0.55, life: rnd(0.3, 0.6), hue: rnd(10, 50),
+          g: -0.05, size: rnd(0.15, 0.3), decay: 1.6, light: 60
+        });
+        for (const s of segs) {
+          if (s.z0 > ball.z + 70) break;
+          for (const o of s.obs) {
+            if (o.z < ball.z || Math.random() > dt * 7) continue;
+            particles.push({
+              x: obsX(s, o) + rnd(-0.2, 0.2), y: Y(o.z) + OBS_H[1], z: o.z,
+              vx: rnd(-1.5, 1.5), vy: rnd(4, 8), vz: rnd(-1, 1), life: 1, hue: rnd(15, 45),
+              g: 0.5, size: rnd(0.15, 0.25), decay: 1, light: 58
+            });
+          }
+        }
+      } else if (level === 3 && !ball.hidden && !ball.air && particles.length < 200 && Math.random() < 0.7) {
+        particles.push({
+          x: ball.x + rnd(-0.3, 0.3), y: ball.y - R + 0.1, z: ball.z - 0.2,
+          vx: rnd(-2, 2), vy: rnd(1, 3), vz: speed * 0.5, life: 0.4, hue: rnd(35, 55),
+          g: 0.5, size: rnd(0.06, 0.12), decay: 2.2, light: 70
+        });
+      } else if (level === 2 && !ball.hidden && particles.length < 200 && Math.random() < 0.6) {
+        particles.push({
+          x: ball.x + rnd(-0.3, 0.3), y: ball.y - 0.3, z: ball.z - 0.2,
+          vx: rnd(-1, 1), vy: rnd(0.5, 2), vz: speed * 0.6, life: 0.5, hue: 200,
+          g: 0.3, size: rnd(0.08, 0.16), decay: 2, light: 95
+        });
+      }
     } else if (state === 'dead') {
       deadTimer += dt;
       if (deadTimer > 0.7 && overEl.classList.contains('hidden')) {
@@ -403,9 +561,9 @@ const RANKING_URL = 'https://script.google.com/macros/s/AKfycbyFB4SryFu1T3StSoZh
     }
 
     for (const p of particles) {
-      p.vy -= GRAVITY * 0.6 * dt;
+      p.vy -= GRAVITY * p.g * dt;
       p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
-      p.life -= dt * 0.7;
+      p.life -= dt * p.decay;
     }
     particles = particles.filter(p => p.life > 0);
     shake = Math.max(0, shake - dt);
@@ -450,42 +608,122 @@ const RANKING_URL = 'https://script.google.com/macros/s/AKfycbyFB4SryFu1T3StSoZh
     if (fill) { ctx.fillStyle = fill; ctx.fill(); }
     if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw || 1; ctx.stroke(); }
   }
+  function line3(pts, stroke, lw) {
+    const cp = pts.map(p => toCam(p[0], p[1], p[2]));
+    if (cp.some(p => p.z < NEAR)) return;
+    ctx.beginPath();
+    cp.forEach((p, i) => i ? ctx.lineTo(sx(p), sy(p)) : ctx.moveTo(sx(p), sy(p)));
+    ctx.strokeStyle = stroke; ctx.lineWidth = lw || 1; ctx.stroke();
+  }
 
   function drawSky(hue) {
     const hy = H / 2 + oy - F * Math.tan(TH);
+    let c0, c1, c2, sunA, sunB;
+    if (level === 1) { c0 = '#150000'; c1 = 'hsl(12,90%,30%)'; c2 = '#0d0000'; sunA = 'hsl(48,100%,62%)'; sunB = 'hsl(8,100%,45%)'; }
+    else if (level === 3) { c0 = '#1b0f24'; c1 = 'hsl(28,80%,42%)'; c2 = '#120a08'; sunA = 'hsl(45,100%,65%)'; sunB = 'hsl(15,95%,50%)'; }
+    else if (level === 2) { c0 = 'hsl(215,55%,14%)'; c1 = 'hsl(200,55%,62%)'; c2 = 'hsl(215,45%,12%)'; sunA = '#ffffff'; sunB = 'hsl(195,80%,82%)'; }
+    else { c0 = `hsl(${hue + 40},60%,6%)`; c1 = `hsl(${hue + 90},65%,22%)`; c2 = `hsl(${hue},55%,5%)`; sunA = `hsl(${hue + 160},100%,70%)`; sunB = `hsl(${hue + 120},100%,55%)`; }
     const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, `hsl(${hue + 40},60%,6%)`);
-    g.addColorStop(clamp(hy / H, 0.05, 0.95), `hsl(${hue + 90},65%,22%)`);
-    g.addColorStop(1, `hsl(${hue},55%,5%)`);
+    g.addColorStop(0, c0);
+    g.addColorStop(clamp(hy / H, 0.05, 0.95), c1);
+    g.addColorStop(1, c2);
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
 
     for (const s of stars) {
-      const x = ((s.x * W - cam.x * 3) % W + W) % W;
-      const y = s.y * Math.max(0, hy - 20);
-      ctx.globalAlpha = 0.4 + 0.4 * Math.sin(clock * 2 + s.t);
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(x, y, s.s, s.s);
+      if (level === 1) {
+        // brasas subindo
+        const y = hy * (1 - ((s.y + clock * 0.06 * s.s) % 1));
+        const x = ((s.x * W + Math.sin(clock + s.t) * 12 - cam.x * 3) % W + W) % W;
+        ctx.globalAlpha = 0.5 + 0.4 * Math.sin(clock * 3 + s.t);
+        ctx.fillStyle = `hsl(${20 + s.t * 5},100%,60%)`;
+        ctx.fillRect(x, y, s.s * 1.6, s.s * 1.6);
+      } else if (level === 0 || level === 3) {
+        const x = ((s.x * W - cam.x * 3) % W + W) % W;
+        const y = s.y * Math.max(0, hy - 20);
+        ctx.globalAlpha = 0.4 + 0.4 * Math.sin(clock * 2 + s.t);
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(x, y, s.s, s.s);
+      }
     }
     ctx.globalAlpha = 1;
 
-    // sol do horizonte
-    const sunX = W / 2 + ox - cam.x * 4, sunY = hy - 10, sr = Math.min(W, H) * 0.16;
+    // sol / lua do horizonte
+    const sunX = W / 2 + ox - cam.x * 4, sunY = hy - 10, sr = Math.min(W, H) * (level === 1 ? 0.2 : 0.16);
     const sg = ctx.createLinearGradient(0, sunY - sr, 0, sunY + sr);
-    sg.addColorStop(0, `hsl(${hue + 160},100%,70%)`);
-    sg.addColorStop(1, `hsl(${hue + 120},100%,55%)`);
+    sg.addColorStop(0, sunA);
+    sg.addColorStop(1, sunB);
     ctx.save();
     ctx.beginPath();
     ctx.arc(sunX, sunY, sr, 0, Math.PI * 2);
     ctx.clip();
     ctx.fillStyle = sg;
     ctx.fillRect(sunX - sr, sunY - sr, sr * 2, sr * 2);
-    ctx.fillStyle = `hsl(${hue + 90},65%,22%)`;
-    for (let i = 0; i < 6; i++) {
-      const yy = sunY + i * sr * 0.17;
-      ctx.fillRect(sunX - sr, yy, sr * 2, 2 + i * 1.6);
+    if (level !== 2) {
+      ctx.fillStyle = c1;
+      for (let i = 0; i < 6; i++) {
+        const yy = sunY + i * sr * 0.17;
+        ctx.fillRect(sunX - sr, yy, sr * 2, 2 + i * 1.6);
+      }
     }
     ctx.restore();
+  }
+
+  function drawSnow() {
+    ctx.fillStyle = '#fff';
+    for (const s of stars) {
+      const y = ((s.y + clock * 0.07 * s.s) % 1) * H;
+      const x = ((s.x * W + Math.sin(clock * 0.8 + s.t) * 18 - cam.x * 6) % W + W) % W;
+      ctx.globalAlpha = 0.75;
+      ctx.beginPath();
+      ctx.arc(x, y, s.s * 1.3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function tileColors(hue, light) {
+    if (level === 1) return {
+      side: 'hsl(8,45%,7%)', sideS: 'hsl(18,100%,45%)', front: 'hsl(8,55%,12%)', frontS: 'hsl(22,100%,55%)',
+      top: `hsl(8,35%,${light - 2}%)`, topS: 'hsl(25,100%,55%)'
+    };
+    if (level === 3) return {
+      side: 'hsl(25,25%,8%)', sideS: 'hsl(30,40%,30%)', front: 'hsl(25,25%,12%)', frontS: 'hsl(30,40%,32%)',
+      top: `hsl(25,18%,${light}%)`, topS: 'hsl(30,30%,22%)'
+    };
+    if (level === 2) return {
+      side: 'hsl(205,35%,50%)', sideS: 'hsl(195,90%,85%)', front: 'hsl(205,40%,60%)', frontS: '#ffffff',
+      top: `hsl(200,35%,${light + 66}%)`, topS: 'hsl(195,100%,55%)'
+    };
+    return {
+      side: `hsl(${hue},55%,8%)`, sideS: `hsl(${hue},90%,45%)`, front: `hsl(${hue},60%,16%)`, frontS: `hsl(${hue},100%,60%)`,
+      top: `hsl(${hue},55%,${light}%)`, topS: `hsl(${hue},100%,62%)`
+    };
+  }
+
+  function drawRamp(x0, x1, s) {
+    const y0 = Y(s.z0), yTop = Y(s.z1) + 1.3;
+    const hi = [160, 48, 280, 190][level];
+    const yr = z => y0 + (yTop - y0) * (z - s.z0) / SEG_LEN;
+    const fillC = `hsl(${hi},90%,${28 + Math.sin(clock * 6) * 6}%)`;
+    if (cam.x < x0) poly([[x0, y0, s.z0], [x0, yTop, s.z1], [x0, Y(s.z1), s.z1]], `hsl(${hi},70%,18%)`, `hsl(${hi},100%,70%)`, 1);
+    if (cam.x > x1) poly([[x1, y0, s.z0], [x1, yTop, s.z1], [x1, Y(s.z1), s.z1]], `hsl(${hi},70%,18%)`, `hsl(${hi},100%,70%)`, 1);
+    poly([[x0, y0, s.z0], [x1, y0, s.z0], [x1, yTop, s.z1], [x0, yTop, s.z1]], fillC, `hsl(${hi},100%,72%)`, 2);
+    const mid = (x0 + x1) / 2;
+    for (let c = 0; c < 3; c++) {
+      const za = s.z0 + 2.5 + c * 2.4, zb = za + 1.3;
+      line3([[x0 + 0.35, yr(za) + 0.02, za], [mid, yr(zb) + 0.02, zb], [x1 - 0.35, yr(za) + 0.02, za]], `hsl(${hi},100%,85%)`, 3);
+    }
+  }
+
+  function drawRails(x0, x1, s) {
+    const mid = (x0 + x1) / 2;
+    for (let z = s.z0 + 0.6; z < s.z1; z += 2) {
+      line3([[mid - 0.75, Y(z) + 0.02, z], [mid + 0.75, Y(z) + 0.02, z]], 'hsl(25,45%,32%)', 4);
+    }
+    for (const dx of [-RAIL_OFF, RAIL_OFF]) {
+      line3([[mid + dx, Y(s.z0) + 0.08, s.z0], [mid + dx, Y(s.z1) + 0.08, s.z1]], '#cfd8e0', 2.5);
+    }
   }
 
   function drawTiles(hue) {
@@ -496,45 +734,84 @@ const RANKING_URL = 'https://script.google.com/macros/s/AKfycbyFB4SryFu1T3StSoZh
       if (fade <= 0) continue;
       ctx.globalAlpha = fade;
       const y0 = Y(s.z0), y1 = Y(s.z1);
-      const light = s.i % 2 ? 14 : 10;
+      const c = tileColors(hue, s.i % 2 ? 14 : 10);
       for (let l = 0; l < LANES; l++) {
         if (!s.lanes[l]) continue;
         const x0 = s.cx - TRACK_W / 2 + l * LANE_W + 0.05, x1 = x0 + LANE_W - 0.1;
-        const side = `hsl(${hue},55%,8%)`;
         if ((l === 0 || !s.lanes[l - 1]) && cam.x < x0)
-          poly([[x0, y0, s.z0], [x0, y1, s.z1], [x0, y1 - THICK, s.z1], [x0, y0 - THICK, s.z0]], side, `hsl(${hue},90%,45%)`, 1);
+          poly([[x0, y0, s.z0], [x0, y1, s.z1], [x0, y1 - THICK, s.z1], [x0, y0 - THICK, s.z0]], c.side, c.sideS, 1);
         if ((l === LANES - 1 || !s.lanes[l + 1]) && cam.x > x1)
-          poly([[x1, y0, s.z0], [x1, y1, s.z1], [x1, y1 - THICK, s.z1], [x1, y0 - THICK, s.z0]], side, `hsl(${hue},90%,45%)`, 1);
-        poly([[x0, y0, s.z0], [x1, y0, s.z0], [x1, y0 - THICK, s.z0], [x0, y0 - THICK, s.z0]], `hsl(${hue},60%,16%)`, `hsl(${hue},100%,60%)`, 1.2);
-        poly([[x0, y0, s.z0], [x1, y0, s.z0], [x1, y1, s.z1], [x0, y1, s.z1]],
-          `hsl(${hue},55%,${light}%)`, `hsl(${hue},100%,62%)`, 1.6);
+          poly([[x1, y0, s.z0], [x1, y1, s.z1], [x1, y1 - THICK, s.z1], [x1, y0 - THICK, s.z0]], c.side, c.sideS, 1);
+        poly([[x0, y0, s.z0], [x1, y0, s.z0], [x1, y0 - THICK, s.z0], [x0, y0 - THICK, s.z0]], c.front, c.frontS, 1.2);
+        poly([[x0, y0, s.z0], [x1, y0, s.z0], [x1, y1, s.z1], [x0, y1, s.z1]], c.top, c.topS, 1.6);
+        if (level === 3) drawRails(x0, x1, s);
+        if (s.ramp === l) drawRamp(x0, x1, s);
       }
     }
     ctx.globalAlpha = 1;
   }
 
   function drawObstacle(s, o) {
-    const x = obsX(s, o), w = 0.75, d = 0.6, h = 1.2;
-    const xa = x - w, xb = x + w, zf = o.z - d, zb = o.z + d;
-    const bf = Y(zf), bb = Y(zb), top = Y(o.z) + h;
-    const pulse = 50 + Math.sin(clock * 6 + o.z) * 6;
+    const x = obsX(s, o);
     ctx.globalAlpha = clamp(1 - (o.z - ball.z) / VIEW, 0, 1);
-    if (cam.x < xa) poly([[xa, top, zf], [xa, top, zb], [xa, bb, zb], [xa, bf, zf]], 'hsl(340,80%,30%)', 'hsl(340,100%,70%)', 1);
-    if (cam.x > xb) poly([[xb, top, zf], [xb, top, zb], [xb, bb, zb], [xb, bf, zf]], 'hsl(340,80%,30%)', 'hsl(340,100%,70%)', 1);
-    poly([[xa, top, zf], [xb, top, zf], [xb, top, zb], [xa, top, zb]], 'hsl(340,100%,72%)', '#fff', 1);
-    poly([[xa, top, zf], [xb, top, zf], [xb, bf, zf], [xa, bf, zf]], `hsl(345,95%,${pulse}%)`, 'hsl(340,100%,80%)', 1.2);
+    if (level === 3) {
+      // barreira listrada do trilho (ocupa a pista toda)
+      const xa = s.cx - TRACK_W / 2 + 0.1, xb = s.cx + TRACK_W / 2 - 0.1;
+      const zf = o.z - 0.2, zb = o.z + 0.2, h = OBS_H[3];
+      const bf = Y(zf), top = Y(o.z) + h, tb = top - 0.35;
+      for (const px of [xa + 0.1, (xa + xb) / 2, xb - 0.1])
+        poly([[px - 0.08, tb, zf], [px + 0.08, tb, zf], [px + 0.08, bf, zf], [px - 0.08, bf, zf]], '#555', '#999', 1);
+      poly([[xa, top, zf], [xb, top, zf], [xb, top, zb], [xa, top, zb]], 'hsl(48,100%,70%)', '#fff', 1);
+      poly([[xa, top, zf], [xb, top, zf], [xb, tb, zf], [xa, tb, zf]], 'hsl(48,100%,55%)', '#fff3a0', 1.2);
+      const n = 8, step = (xb - xa) / n;
+      for (let k = 0; k < n; k += 2) {
+        const a = xa + k * step;
+        poly([[a, top, zf - 0.01], [a + step * 0.6, top, zf - 0.01], [a + step, tb, zf - 0.01], [a + step * 0.4, tb, zf - 0.01]], '#151515');
+      }
+    } else if (level === 1) {
+      // vulcão de fogo
+      const w = OBS_W[1] + 0.05, wt = 0.3, d = 0.7, dt2 = 0.25, h = OBS_H[1];
+      const xa = x - w, xb = x + w, zf = o.z - d, zb = o.z + d;
+      const top = Y(o.z) + h, tf = o.z - dt2, tb = o.z + dt2;
+      const lava = `hsl(${30 + Math.sin(clock * 8 + o.z) * 10},100%,${55 + Math.sin(clock * 5 + o.z) * 8}%)`;
+      if (cam.x < x - wt) poly([[xa, Y(zf), zf], [x - wt, top, tf], [x - wt, top, tb], [xa, Y(zb), zb]], 'hsl(10,30%,10%)', 'hsl(18,100%,45%)', 1);
+      if (cam.x > x + wt) poly([[xb, Y(zf), zf], [x + wt, top, tf], [x + wt, top, tb], [xb, Y(zb), zb]], 'hsl(10,30%,10%)', 'hsl(18,100%,45%)', 1);
+      poly([[xa, Y(zf), zf], [xb, Y(zf), zf], [x + wt, top, tf], [x - wt, top, tf]], 'hsl(10,35%,16%)', 'hsl(20,100%,50%)', 1.2);
+      line3([[x, top, tf], [x - 0.15, (top + Y(zf)) / 2, (tf + zf) / 2], [x + 0.05, Y(zf) + 0.1, zf]], lava, 2.5);
+      poly([[x - wt, top, tf], [x + wt, top, tf], [x + wt, top, tb], [x - wt, top, tb]], lava, '#fff3c0', 1);
+    } else if (level === 2) {
+      // pilastra de gelo
+      const w = OBS_W[2], d = 0.5, h = OBS_H[2];
+      const xa = x - w, xb = x + w, zf = o.z - d, zb = o.z + d;
+      const bf = Y(zf), bb = Y(zb), top = Y(o.z) + h;
+      if (cam.x < xa) poly([[xa, top, zf], [xa, top, zb], [xa, bb, zb], [xa, bf, zf]], 'hsl(200,60%,60%)', '#e8fbff', 1);
+      if (cam.x > xb) poly([[xb, top, zf], [xb, top, zb], [xb, bb, zb], [xb, bf, zf]], 'hsl(200,60%,60%)', '#e8fbff', 1);
+      poly([[xa, top, zf], [xb, top, zf], [xb, top, zb], [xa, top, zb]], '#ffffff', '#e8fbff', 1);
+      poly([[xa, top, zf], [xb, top, zf], [xb, bf, zf], [xa, bf, zf]], 'hsla(190,85%,82%,0.95)', '#ffffff', 1.2);
+      line3([[xa + 0.18, top - 0.2, zf - 0.01], [xa + 0.18, bf + 0.3, zf - 0.01]], 'rgba(255,255,255,.9)', 2);
+    } else {
+      const w = 0.75, d = 0.6, h = 1.2;
+      const xa = x - w, xb = x + w, zf = o.z - d, zb = o.z + d;
+      const bf = Y(zf), bb = Y(zb), top = Y(o.z) + h;
+      const pulse = 50 + Math.sin(clock * 6 + o.z) * 6;
+      if (cam.x < xa) poly([[xa, top, zf], [xa, top, zb], [xa, bb, zb], [xa, bf, zf]], 'hsl(340,80%,30%)', 'hsl(340,100%,70%)', 1);
+      if (cam.x > xb) poly([[xb, top, zf], [xb, top, zb], [xb, bb, zb], [xb, bf, zf]], 'hsl(340,80%,30%)', 'hsl(340,100%,70%)', 1);
+      poly([[xa, top, zf], [xb, top, zf], [xb, top, zb], [xa, top, zb]], 'hsl(340,100%,72%)', '#fff', 1);
+      poly([[xa, top, zf], [xb, top, zf], [xb, bf, zf], [xa, bf, zf]], `hsl(345,95%,${pulse}%)`, 'hsl(340,100%,80%)', 1.2);
+    }
     ctx.globalAlpha = 1;
   }
 
   function drawBall(hue) {
     if (ball.hidden) return;
+    const trailC = ['', 'hsl(25,100%,55%)', '#dff3ff', '#ffcf70'][level] || `hsl(${hue + 150},100%,65%)`;
     // rastro
     for (let i = 0; i < trail.length - 1; i++) {
       const t = trail[i], p = toCam(t.x, t.y, t.z);
       if (p.z < NEAR) continue;
       const a = (i + 1) / trail.length;
-      ctx.globalAlpha = a * 0.25;
-      ctx.fillStyle = `hsl(${hue + 150},100%,65%)`;
+      ctx.globalAlpha = a * (level === 1 ? 0.35 : 0.25);
+      ctx.fillStyle = trailC;
       ctx.beginPath();
       ctx.arc(sx(p), sy(p), R * F / p.z * a, 0, Math.PI * 2);
       ctx.fill();
@@ -554,10 +831,32 @@ const RANKING_URL = 'https://script.google.com/macros/s/AKfycbyFB4SryFu1T3StSoZh
     const p = toCam(ball.x, ball.y, ball.z);
     if (p.z < NEAR) return;
     const X = sx(p), Yy = sy(p), r = R * F / p.z;
+    if (level === 1) {
+      // brilho da bola de fogo
+      const glow = ctx.createRadialGradient(X, Yy, r * 0.5, X, Yy, r * 2.4);
+      glow.addColorStop(0, 'rgba(255,140,0,0.55)');
+      glow.addColorStop(1, 'rgba(255,40,0,0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(X, Yy, r * 2.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
     const g = ctx.createRadialGradient(X - r * 0.35, Yy - r * 0.35, r * 0.1, X, Yy, r);
-    g.addColorStop(0, '#ffffff');
-    g.addColorStop(0.35, `hsl(${hue + 150},100%,70%)`);
-    g.addColorStop(1, `hsl(${hue + 190},90%,30%)`);
+    let stripe, outline;
+    if (level === 1) {
+      g.addColorStop(0, '#fffbe0'); g.addColorStop(0.3, 'hsl(48,100%,60%)');
+      g.addColorStop(0.7, 'hsl(22,100%,50%)'); g.addColorStop(1, 'hsl(5,90%,35%)');
+      stripe = 'rgba(255,230,140,.55)'; outline = 'hsl(35,100%,65%)';
+    } else if (level === 3) {
+      g.addColorStop(0, '#ffffff'); g.addColorStop(0.35, '#c9ced6'); g.addColorStop(1, '#3a3f47');
+      stripe = 'rgba(40,40,50,.5)'; outline = '#e6ebf0';
+    } else if (level === 2) {
+      g.addColorStop(0, '#ffffff'); g.addColorStop(0.55, '#eaf6ff'); g.addColorStop(1, 'hsl(205,50%,68%)');
+      stripe = 'rgba(140,185,230,.55)'; outline = '#ffffff';
+    } else {
+      g.addColorStop(0, '#ffffff'); g.addColorStop(0.35, `hsl(${hue + 150},100%,70%)`); g.addColorStop(1, `hsl(${hue + 190},90%,30%)`);
+      stripe = 'rgba(255,255,255,.45)'; outline = `hsl(${hue + 150},100%,80%)`;
+    }
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.arc(X, Yy, r, 0, Math.PI * 2);
@@ -567,7 +866,7 @@ const RANKING_URL = 'https://script.google.com/macros/s/AKfycbyFB4SryFu1T3StSoZh
     ctx.beginPath();
     ctx.arc(X, Yy, r, 0, Math.PI * 2);
     ctx.clip();
-    ctx.strokeStyle = 'rgba(255,255,255,.45)';
+    ctx.strokeStyle = stripe;
     ctx.lineWidth = Math.max(1, r * 0.08);
     for (let k = 0; k < 3; k++) {
       const a = ball.rot + k * Math.PI / 3;
@@ -576,7 +875,7 @@ const RANKING_URL = 'https://script.google.com/macros/s/AKfycbyFB4SryFu1T3StSoZh
       ctx.stroke();
     }
     ctx.restore();
-    ctx.strokeStyle = `hsl(${hue + 150},100%,80%)`;
+    ctx.strokeStyle = outline;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.arc(X, Yy, r, 0, Math.PI * 2);
@@ -586,9 +885,9 @@ const RANKING_URL = 'https://script.google.com/macros/s/AKfycbyFB4SryFu1T3StSoZh
   function drawParticle(p) {
     const c = toCam(p.x, p.y, p.z);
     if (c.z < NEAR) return;
-    const s = 0.18 * F / c.z;
+    const s = p.size * F / c.z;
     ctx.globalAlpha = clamp(p.life, 0, 1);
-    ctx.fillStyle = `hsl(${p.hue},100%,65%)`;
+    ctx.fillStyle = `hsl(${p.hue},100%,${p.light}%)`;
     ctx.fillRect(sx(c) - s / 2, sy(c) - s / 2, s, s);
     ctx.globalAlpha = 1;
   }
@@ -614,15 +913,25 @@ const RANKING_URL = 'https://script.google.com/macros/s/AKfycbyFB4SryFu1T3StSoZh
     drawTiles(hue);
     items.sort((a, b) => b.d - a.d);
     for (const it of items) it.draw();
+    if (level === 2) drawSnow();
 
     // vinheta de velocidade
     if (state === 'play') {
       const v = clamp((speed - 16) / 30, 0, 1);
       const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75);
       vg.addColorStop(0, 'rgba(0,0,0,0)');
-      vg.addColorStop(1, `rgba(0,0,0,${0.25 + v * 0.35})`);
+      vg.addColorStop(1, level === 1 ? `rgba(60,0,0,${0.35 + v * 0.3})` : `rgba(0,0,0,${0.25 + v * 0.35})`);
       ctx.fillStyle = vg;
       ctx.fillRect(0, 0, W, H);
+    }
+
+    // clarão da troca de nível
+    if (trans) {
+      const a = trans.t < 0.35 ? trans.t / 0.35 : Math.max(0, 1 - (trans.t - 0.35) / 0.55);
+      ctx.globalAlpha = a * 0.92;
+      ctx.fillStyle = ['rgb(120,220,255)', 'rgb(255,90,20)', '#ffffff', 'rgb(255,190,80)'][trans.to];
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalAlpha = 1;
     }
   }
 

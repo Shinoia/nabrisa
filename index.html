@@ -99,7 +99,7 @@
   <div class="rank hidden" id="rankOver"><h3>TOP 10</h3><ol id="rankListOver"></ol></div>
 </div>
 
-<div id="footer"><a href="https://www.hevems.webnode.com" target="_blank" rel="noopener">www.hevems.webnode.com</a><span id="usuarios"></span></div>
+<div id="footer">@cqcfoda</div>
 
 <script>
 // ====== RANKING ======
@@ -167,19 +167,11 @@ const RANKING_URL = 'https://script.google.com/macros/s/AKfycbyFB4SryFu1T3StSoZh
     const res = await fetch(url);
     const data = await res.json();
     showRanking(data.top || []);
-    if (data.usuarios) $('usuarios').textContent = ` · ${Number(data.usuarios).toLocaleString('pt-BR')} usuários`;
     return data;
   }
-  // Primeira vez neste navegador = visitante novo (conta +1 no contador)
-  let visita = 'nova';
-  try {
-    if (localStorage.getItem('naladera_visitou')) visita = 'repetida';
-    else localStorage.setItem('naladera_visitou', '1');
-  } catch (e) {}
   function loadRanking() {
     if (!RANKING_URL) return;
-    callRanking({ action: 'top', visita }).catch(() => {});
-    visita = 'repetida';
+    callRanking({ action: 'top' }).catch(() => {});
   }
   $('saveForm').addEventListener('submit', async e => {
     e.preventDefault();
